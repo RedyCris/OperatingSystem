@@ -153,14 +153,27 @@ void exception_handler(struct trapframe *tf) {
             break;
         case CAUSE_FAULT_FETCH:
             break;
-        case CAUSE_ILLEGAL_INSTRUCTION:
-             // 非法指令异常处理
-             /* LAB1 CHALLENGE3   YOUR CODE :  */
-            /*(1)输出指令异常类型（ Illegal instruction）
-             *(2)输出异常指令地址
-             *(3)更新 tf->epc寄存器
-            */
+case CAUSE_ILLEGAL_INSTRUCTION: {
+            // 读取异常指令的地址
+            uint32_t illegal_inst = *(uint32_t *)(tf->epc);
+
+            // 判断是否为 mret 指令
+            if (illegal_inst == 0x30200073) {
+                // 非法 mret 指令处理
+                cprintf("Exception type: Illegal mret instruction\n");
+                cprintf("Exception address: 0x%08x\n", tf->epc);
+
+                // 更新 EPC 跳过非法 mret 指令（设长度为4字节）
+                tf->epc += 4;
+            } else {
+                // 处理其他非法指令
+                cprintf("Exception type: Illegal instruction\n");
+                cprintf("Exception address: 0x%08x\n", tf->epc);
+                // 跳过当前的非法指令
+                tf->epc += 4;
+            }
             break;
+        }
         case CAUSE_BREAKPOINT:
             //断点异常处理
             /* LAB1 CHALLLENGE3   YOUR CODE :  */
