@@ -176,11 +176,14 @@ case CAUSE_ILLEGAL_INSTRUCTION: {
         }
         case CAUSE_BREAKPOINT:
             //断点异常处理
-            /* LAB1 CHALLLENGE3   YOUR CODE :  */
+            /* LAB1 CHALLLENGE3   2213904 :  */
             /*(1)输出指令异常类型（ breakpoint）
              *(2)输出异常指令地址
              *(3)更新 tf->epc寄存器
             */
+            cprintf("breakpoint\n");
+            cprintf("instruction address:0x%08x\n", tf->epc);
+            tf->epc += 4;
             break;
         case CAUSE_MISALIGNED_LOAD:
             break;
