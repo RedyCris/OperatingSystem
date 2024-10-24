@@ -58,83 +58,91 @@ free_area_t free_area;
 #define free_list (free_area.free_list)
 #define nr_free (free_area.nr_free)
 
+//初始化空闲页链表
 static void
 default_init(void) {
-    list_init(&free_list);
-    nr_free = 0;
+    list_init(&free_list); //初始化空闲页链表，将其置为空
+    nr_free = 0;  //初始化可用的物理页面数为0
 }
 
+//初始化一个连续的空闲页块，并将其添加到空闲页链表中。
 static void
 default_init_memmap(struct Page *base, size_t n) {
     assert(n > 0);
-    struct Page *p = base;
+    struct Page *p = base;    //从起始页开始遍历
     for (; p != base + n; p ++) {
-        assert(PageReserved(p));
-        p->flags = p->property = 0;
-        set_page_ref(p, 0);
+        assert(PageReserved(p)); //确保这些页是保留的（未被使用的）
+        p->flags = p->property = 0; //初始化页的标志位和属性。
+        set_page_ref(p, 0); //设置页的引用计数为0
     }
-    base->property = n;
-    SetPageProperty(base);
-    nr_free += n;
-    if (list_empty(&free_list)) {
+    
+    base->property = n; //设置起始页的属性为页块的大小
+    SetPageProperty(base);  //标记起始页为属性页（也说明该页块是已分配链表位置的）
+    nr_free += n;  //增加可用的物理页面数
+    
+    if (list_empty(&free_list)) {  //如果空闲链表为空，直接将页块添加到链表中。  
         list_add(&free_list, &(base->page_link));
     } else {
         list_entry_t* le = &free_list;
-        while ((le = list_next(le)) != &free_list) {
-            struct Page* page = le2page(le, page_link);
+        while ((le = list_next(le)) != &free_list) {  //遍历链表
+            struct Page* page = le2page(le, page_link);  //获取链表节点对应的页
             if (base < page) {
-                list_add_before(le, &(base->page_link));
+                list_add_before(le, &(base->page_link)); //如果当前页在链表中找到位置，插入到该位置之前
                 break;
             } else if (list_next(le) == &free_list) {
-                list_add(le, &(base->page_link));
+                list_add(le, &(base->page_link));   //如果遍历到最后一个节点，将页块添加到链表末尾
             }
         }
     }
 }
 
+//分配指定数量的连续页
 static struct Page *
 default_alloc_pages(size_t n) {
     assert(n > 0);
-    if (n > nr_free) {
+    if (n > nr_free) { //如果请求的页数大于可用页数
         return NULL;
     }
-    struct Page *page = NULL;
+    struct Page *page = NULL;  //初始化分配的页指针
     list_entry_t *le = &free_list;
     while ((le = list_next(le)) != &free_list) {
         struct Page *p = le2page(le, page_link);
-        if (p->property >= n) {
+        if (p->property >= n) {  //如果找到足够大的页块，就记录并跳出循环。
             page = p;
             break;
         }
     }
+    //如果找到合适的页块
     if (page != NULL) {
-        list_entry_t* prev = list_prev(&(page->page_link));
-        list_del(&(page->page_link));
-        if (page->property > n) {
-            struct Page *p = page + n;
-            p->property = page->property - n;
-            SetPageProperty(p);
-            list_add(prev, &(p->page_link));
+        list_entry_t* prev = list_prev(&(page->page_link)); //获取前一个节点
+        list_del(&(page->page_link));  //从链表中删除该页块
+        if (page->property > n) {  //如果页块大小大于请求的大小，分割页块。
+            struct Page *p = page + n;  //新页块的起始页
+            p->property = page->property - n;  //设置新页块的大小
+            SetPageProperty(p);  //标记新页块的属性页
+            list_add(prev, &(p->page_link)); //新页块插入到链表中。
         }
         nr_free -= n;
-        ClearPageProperty(page);
+        ClearPageProperty(page);  //清除分配页块的属性标记。
     }
     return page;
 }
 
+//释放指定数量的连续页，并将其添加回空闲页链表。
 static void
 default_free_pages(struct Page *base, size_t n) {
     assert(n > 0);
     struct Page *p = base;
     for (; p != base + n; p ++) {
-        assert(!PageReserved(p) && !PageProperty(p));
-        p->flags = 0;
-        set_page_ref(p, 0);
+        assert(!PageReserved(p) && !PageProperty(p)); //确保这些页不是保留的且没有属性标记
+        p->flags = 0;  //清除页的标志位（重新设置为0）
+        set_page_ref(p, 0);  //设置页的引用计数为0
     }
     base->property = n;
     SetPageProperty(base);
     nr_free += n;
 
+    //插入页块
     if (list_empty(&free_list)) {
         list_add(&free_list, &(base->page_link));
     } else {
@@ -150,17 +158,19 @@ default_free_pages(struct Page *base, size_t n) {
         }
     }
 
+    //判断是否能与前一个页块合并
     list_entry_t* le = list_prev(&(base->page_link));
     if (le != &free_list) {
         p = le2page(le, page_link);
-        if (p + p->property == base) {
+        if (p + p->property == base) {  //如果前一个页块与当前页块相邻。
             p->property += base->property;
-            ClearPageProperty(base);
+            ClearPageProperty(base); //清除当前页块的属性标记。
             list_del(&(base->page_link));
-            base = p;
+            base = p; //更新当前页块为合并后的页块，将指针指向前一个空闲页块，以便继续检查合并后的连续空闲页块
         }
     }
 
+    //判断是否能与后一个页块合并
     le = list_next(&(base->page_link));
     if (le != &free_list) {
         p = le2page(le, page_link);

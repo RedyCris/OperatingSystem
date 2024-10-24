@@ -76,9 +76,9 @@ best_fit_init_memmap(struct Page *base, size_t n) {
         /*LAB2 EXERCISE 2: 2213897*/ 
         // 清空当前页框的标志和属性信息，并将页框的引用计数设置为0
         // 结构体Page的相关定义见memlayout.h
-        p->flags = 0;       // 清空标志信息
-        p->property = 0;    // 清空属性信息
-        set_page_ref(p, 0); // 设置引用计数为0
+        p->flags = 0;
+        p->property = 0;
+        set_page_ref(p, 0);
     }
     base->property = n;
     SetPageProperty(base);
@@ -122,26 +122,26 @@ best_fit_alloc_pages(size_t n) {
     // 下面的代码是first-fit的部分代码，请修改下面的代码改为best-fit
     // 遍历空闲链表，查找满足需求的空闲页框
     // 如果找到满足需求的页面，记录该页面以及当前找到的最小连续空闲页框数量
-    while ((le = list_next(le)) != &free_list) {
+    while ((le = list_next(le)) != &free_list) { //遍历链表
         struct Page *p = le2page(le, page_link);
-        if (p->property >= n && min_size > p->property) {
-            page = p;
-            min_size = p->property;
+        if (p->property >= n && min_size > p->property) { //如果该页面属性值大于所需的页面数n且小于现在的min_size
+            page = p;  //page改为该页面
+            min_size = p->property;  //修改min_size 
         }
     }
 
     if (page != NULL) {
         list_entry_t* prev = list_prev(&(page->page_link));
-        list_del(&(page->page_link));   // 从空闲链表中删除已分配的页面
+        list_del(&(page->page_link));
+
+        //如果页块大小大于请求的大小，分割页块
         if (page->property > n) {
             struct Page *p = page + n;
-
-            // 如果剩余的空闲页框数量大于需求的页面数量，将剩余部分添加到空闲链表
             p->property = page->property - n;
             SetPageProperty(p);
             list_add(prev, &(p->page_link));
         }
-        nr_free -= n;   // 减少可用内存块的数量
+        nr_free -= n;
         ClearPageProperty(page);    // 清除页面的属性标记
     }
     return page;    // 返回分配的页面
@@ -160,11 +160,11 @@ best_fit_free_pages(struct Page *base, size_t n) {
     // 编写代码
     // 具体来说就是设置当前页块的属性为释放的页块数、并将当前页块标记为已分配状态、最后增加nr_free的值
 
-    // 设置当前页块的属性为已释放的页块数，并将当前页块标记为已分配状态，然后增加nr_free的值
     base->property = n;
-    SetPageProperty(base);
+    SetPageProperty(base);  //将当前页块标记为已分配状态
     nr_free += n;
     
+    //插入页块
     if (list_empty(&free_list)) {
         list_add(&free_list, &(base->page_link));
     } else {
@@ -194,14 +194,14 @@ best_fit_free_pages(struct Page *base, size_t n) {
         // 判断前面的空闲页块是否与当前页块是连续的，如果是连续的，则将当前页块合并到前面的空闲页块中
         if(p + p->property == base)
         {
-            // 更新前一个空闲页块的大小，加上当前页块的大小
-            p->property += base->property;
+            p->property += base->property; // 更新前一个空闲页块的大小，加上当前页块的大小
             ClearPageProperty(base);    // 清除当前页块的属性标记，表示不再是空闲页块
             list_del(&(base->page_link));   // 从链表中删除当前页块
             base = p;   // 将指针指向前一个空闲页块，以便继续检查合并后的连续空闲页块
         }
     }
 
+    //判断是否能与后一个页块合并
     le = list_next(&(base->page_link));
     if (le != &free_list) {
         p = le2page(le, page_link);
