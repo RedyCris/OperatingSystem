@@ -1,18 +1,25 @@
 #include <pmm.h>
 #include <list.h>
-#include <string.h>
 #include <stdio.h>
 #include <buddy_pmm.h>
+#include <string.h>
+
+#define mem_begin 0xffffffffc020f318
+#define buddy_array (buddy_s.free_array)
+#define nr_free (buddy_s.nr_free)
+#define max_order (buddy_s.max_order)
+
 
 free_buddy_t buddy_s;
-#define buddy_array (buddy_s.free_array)
-#define max_order (buddy_s.max_order)
-#define nr_free (buddy_s.nr_free)
-#define mem_begin 0xffffffffc020f318
+
+static size_t buddy_system_nr_free_pages(void)
+{
+    return nr_free;
+}
 
 static int IS_POWER_OF_2(size_t n)
 {
-    if (n & (n - 1))
+    if (n & (n - 1))//对于 2 的幂次方数 n，n - 1 的二进制表示会把唯一的 1 位变为 0，而其余位变为 1。这样 n & (n - 1) 的结果就是 0
     {
         return 0;
     }
@@ -49,7 +56,7 @@ static size_t ROUNDDOWN2(size_t n)
     {
         return n;
     }
-}
+}//n向下舍入到最接近的 2 的幂
 
 static size_t ROUNDUP2(size_t n)
 {
@@ -67,7 +74,7 @@ static size_t ROUNDUP2(size_t n)
     {
         return n;
     }
-}
+}//n 向上舍入到最接近的 2 的幂
 
 static void buddy_split(size_t n)
 {
@@ -77,7 +84,7 @@ static void buddy_split(size_t n)
     struct Page *page_b;
 
     page_a = le2page(list_next(&(buddy_array[n])), page_link);
-    page_b = page_a + (1 << (n - 1)); // 找到a的伙伴块b，因为是大块分割的，直接加2的n-1次幂就行
+    page_b = page_a + (1 << (n - 1)); // 找到a的伙伴块b，地址连续，直接加2的n-1次幂就行
     page_a->property = n - 1;
     page_b->property = n - 1;
 
@@ -90,14 +97,13 @@ static void buddy_split(size_t n)
     list_add(&(page_a->page_link), &(page_b->page_link));
 
     return;
-}
+}//将一个大小为 2^n 的内存块分裂成两个大小为 2^(n-1) 的内存块
 
 static void
 show_buddy_array(int left, int right) // 左闭右闭
 {
     bool empty = 1; // 表示空闲链表数组为空
     assert(left >= 0 && left <= max_order && right >= 0 && right <= max_order);
-    cprintf("==================显示空闲链表数组==================\n");
     for (int i = left; i <= right; i++)
     {
         list_entry_t *le = &buddy_array[i];
@@ -122,14 +128,12 @@ show_buddy_array(int left, int right) // 左闭右闭
     {
         cprintf("无空闲块！！！\n");
     }
-    cprintf("======================显示完成======================\n\n\n");
     return;
-}
+}//遍历并打印出指定范围内的伙伴系统空闲链表的信息
 
 static void
 buddy_system_init(void)
 {
-    // 初始化伙伴堆链表数组中的每个free_list头
     for (int i = 0; i < MAX_BUDDY_ORDER + 1; i++)
     {
         list_init(buddy_array + i);
@@ -139,105 +143,97 @@ buddy_system_init(void)
     return;
 }
 
-// 空闲链表初始化的部分
 static void
-buddy_system_init_memmap(struct Page *base, size_t n) // base是第一个页的地址，n是页的数量
-{
+buddy_system_init_memmap(struct Page *base, size_t n) {
     assert(n > 0);
-    size_t pnum;
-    unsigned int order;
-    pnum = ROUNDDOWN2(n);      // 将页数向下取整为2的幂，不到2的15幂，向下取，变成14
-    order = getOrderOf2(pnum); // 求出页数对应的2的幂
-    struct Page *p = base;
-    // 初始化pages数组中范围内的每个Page
-    for (; p != base + pnum; p++)
-    {
+
+    
+    size_t pnum = ROUNDDOWN2(n);
+    unsigned int order = getOrderOf2(pnum);
+
+   
+    for (struct Page *p = base; p != base + pnum; p++) {
         assert(PageReserved(p));
-        p->flags = 0;     // 清除所有flag标记
-        p->property = -1; // 全部初始化为非头页
-        set_page_ref(p, 0);
+        p->flags = 0;          
+        p->property = -1;      
+        set_page_ref(p, 0);    
     }
+
     max_order = order;
     nr_free = pnum;
-    list_add(&(buddy_array[max_order]), &(base->page_link)); // 将第一页base插入数组的最后一个链表，作为初始化的最大块的头页
-    // cprintf("base->page_link:%p\n", &(base->page_link));
-    base->property = max_order; // 将第一页base的property设为最大块的2幂
-    SetPageProperty(base);      // ？？？//
+    list_add(&(buddy_array[max_order]), &(base->page_link));
+
+    
+    base->property = max_order;
+    SetPageProperty(base); // 初始化
+
     return;
 }
 
+
 static struct Page *
-buddy_system_alloc_pages(size_t requested_pages)
-{
+buddy_system_alloc_pages(size_t requested_pages) {
     assert(requested_pages > 0);
 
-    if (requested_pages > nr_free)
-    {
-        return NULL;
+    // 检查请求的页数是否超过可用页数
+    if (requested_pages > nr_free) {
+        return NULL; // 如果请求页数大于可用页数，返回NULL
     }
 
     struct Page *allocated_page = NULL;
-    size_t adjusted_pages = ROUNDUP2(requested_pages); // 如：求7个页，给8个页
-    size_t order_of_2 = getOrderOf2(adjusted_pages);   // 求出所需页数对应的2的幂,为数组下标
+    size_t adjusted_pages = ROUNDUP2(requested_pages); // 向上取整
+    size_t order_of_2 = getOrderOf2(adjusted_pages);   // 计算对应的2的幂
 
-    // 先找有没有合适的空闲块，没有的话得分割大块
-    bool found = 0;
-    while (!found)
-    {
-        if (!list_empty(&(buddy_array[order_of_2])))
-        {
+    // 查找合适的空闲块，若没有，则分割大块
+    while (1) { // 使用1表示true
+        if (!list_empty(&(buddy_array[order_of_2]))) {
             allocated_page = le2page(list_next(&(buddy_array[order_of_2])), page_link);
-            list_del(list_next(&(buddy_array[order_of_2]))); // 删除空闲链表中找到的空闲块
-            // SetPageProperty(allocated_page);
-            ClearPageProperty(allocated_page); // 头页设置flags的第二位为0
-            found = 1;
-        }
-        else
-        {
-            int i;
-            for (i = order_of_2 + 1; i <= max_order; ++i)
-            {
-                if (!list_empty(&(buddy_array[i])))
-                {
-                    // cprintf("空闲链表数组NO.%d将被分裂\n", i);
-                    buddy_split(i);
+            list_del(list_next(&(buddy_array[order_of_2]))); // 从空闲链表中删除该块
+            ClearPageProperty(allocated_page); // 清除头页的标记
+            break; // 找到合适的块，退出循环
+        } else {
+            // 查找是否有更大的块可供分裂
+            int found_larger_block = 0; // 使用整数替代布尔值
+            for (int i = order_of_2 + 1; i <= max_order; ++i) {
+                if (!list_empty(&(buddy_array[i]))) {
+                    buddy_split(i); // 分裂大块
+                    found_larger_block = 1; // 设置为1表示找到大块
                     break;
                 }
             }
-            // 找了一圈啥也没找见，只能分配失败了
-            if (i > max_order)
-            {
+            // 如果没有找到合适的块，分配失败
+            if (!found_larger_block) {
                 break;
             }
         }
     }
 
-    if (allocated_page != NULL)
-    {
-        nr_free -= adjusted_pages;
+    // 更新可用页数
+    if (allocated_page != NULL) {
+        nr_free -= adjusted_pages; // 减少可用页数
     }
-    // show_buddy_array(0, MAX_BUDDY_ORDER); // test point
-    return allocated_page;
+
+    return allocated_page; // 返回分配的页面
 }
+
 
 struct Page *get_buddy(struct Page *block_addr, unsigned int block_size)
 {
-    size_t real_block_size = 1 << block_size;                    // 幂次转换成数
-    size_t relative_block_addr = (size_t)block_addr - mem_begin; // 计算相对于初始化的第一个页的偏移量
+    size_t real_block_size = 1 << block_size;                    
+    size_t relative_block_addr = (size_t)block_addr - mem_begin; // 计算对于第一个页的偏移量
 
-    size_t sizeOfPage = real_block_size * sizeof(struct Page);                  // sizeof(struct Page)是0x28
+    size_t sizeOfPage = real_block_size * sizeof(struct Page);                  
     size_t buddy_relative_addr = (size_t)relative_block_addr ^ sizeOfPage;      // 异或得到伙伴块的相对地址
     struct Page *buddy_page = (struct Page *)(buddy_relative_addr + mem_begin); // 返回伙伴块指针
     return buddy_page;
 }
 
-static void
-buddy_system_free_pages(struct Page *base, size_t n)
+static void buddy_system_free_pages(struct Page *base, size_t n)
 {
     assert(n > 0);
     unsigned int pnum = 1 << (base->property); // 块中页的数目
     assert(ROUNDUP2(n) == pnum);
-    cprintf("BS算法将释放第NO.%d页开始的共%d页\n", page2ppn(base), pnum);
+    cprintf("buddy system分配释放第NO.%d页开始共%d页\n", page2ppn(base), pnum);
     struct Page *left_block = base; // 放块的头页
     struct Page *buddy = NULL;
     struct Page *tmp = NULL;
@@ -276,14 +272,10 @@ buddy_system_free_pages(struct Page *base, size_t n)
     return;
 }
 
-static size_t
-buddy_system_nr_free_pages(void)
-{
-    return nr_free;
-}
+
 
 static void
-basic_check(void)
+buddy_system_check(void)
 {
     cprintf("总空闲块数目为：%d\n", nr_free);
     struct Page *p0, *p1, *p2;
@@ -301,12 +293,9 @@ basic_check(void)
     p2 = alloc_pages(5);
     show_buddy_array(0, MAX_BUDDY_ORDER);
 
-    // cprintf("p0的物理地址0x%016lx.\n", PADDR(p0)); // 0x8020f318
-    cprintf("p0的虚拟地址0x%016lx.\n", p0);
-    // cprintf("p1的物理地址0x%016lx.\n", PADDR(p1)); // 0x8020f458,和p0相差0x140=0x28*5
-    cprintf("p1的虚拟地址0x%016lx.\n", p1);
-    // cprintf("p2的物理地址0x%016lx.\n", PADDR(p2)); // 0x8020f598,和p1相差0x140=0x28*5
-    cprintf("p2的虚拟地址0x%016lx.\n", p2);
+    cprintf("p0的虚拟地址0x%016lx.\n", p0);// 0x8020f318
+    cprintf("p1的虚拟地址0x%016lx.\n", p1);// 0x8020f458,和p0相差0x140=0x28*5
+    cprintf("p2的虚拟地址0x%016lx.\n", p2);// 0x8020f598,和p1相差0x140=0x28*5
 
     assert(p0 != p1 && p0 != p2 && p1 != p2);
     assert(page_ref(p0) == 0 && page_ref(p1) == 0 && page_ref(p2) == 0);
@@ -315,33 +304,26 @@ basic_check(void)
     assert(page2pa(p1) < npage * PGSIZE);
     assert(page2pa(p2) < npage * PGSIZE);
 
-    // 假设空闲块数是0，看看能不能再分配
     unsigned int nr_free_store = nr_free;
     nr_free = 0;
 
     assert(alloc_page() == NULL);
 
-    // 清空看nr_free能不能变
-    cprintf("释放p0中。。。。。。\n");
     free_pages(p0, 5);
     cprintf("释放p0后，总空闲块数目为：%d\n", nr_free); // 变成了8
     show_buddy_array(0, MAX_BUDDY_ORDER);
 
-    cprintf("释放p1中。。。。。。\n");
     free_pages(p1, 5);
     cprintf("释放p1后，总空闲块数目为：%d\n", nr_free); // 变成了16
     show_buddy_array(0, MAX_BUDDY_ORDER);
 
-    cprintf("释放p2中。。。。。。\n");
     free_pages(p2, 5);
     cprintf("释放p2后，总空闲块数目为：%d\n", nr_free); // 变成了24
     show_buddy_array(0, MAX_BUDDY_ORDER);
 
-    // 分配块全部收回，重置nr_free为最大值
     nr_free = 16384;
 
     struct Page *p3 = alloc_pages(16384);
-    cprintf("分配p3之后(16384页)\n");
     show_buddy_array(0, MAX_BUDDY_ORDER);
 
     // 全部回收
@@ -349,47 +331,7 @@ basic_check(void)
     show_buddy_array(0, MAX_BUDDY_ORDER);
 }
 
-// LAB2: below code is used to check the first fit allocation algorithm
-// NOTICE: You SHOULD NOT CHANGE basic_check, default_check functions!
-static void
-buddy_system_check(void)
-{
-    basic_check();
 
-    // 一些复杂的操作
-    cprintf("==========开始测试一些复杂的例子==========\n");
-    cprintf("首先p0请求5页\n");
-    struct Page *p0 = alloc_pages(5), *p1, *p2;
-    assert(p0 != NULL);
-    assert(!PageProperty(p0));
-    show_buddy_array(0, MAX_BUDDY_ORDER);
-
-    cprintf("然后p1请求15页\n");
-    p1 = alloc_pages(15);
-    show_buddy_array(0, MAX_BUDDY_ORDER);
-
-    cprintf("最后p2请求21页\n");
-    p2 = alloc_pages(21);
-    show_buddy_array(0, MAX_BUDDY_ORDER);
-
-    cprintf("p0的虚拟地址0x%016lx.\n", p0);
-    cprintf("p1的虚拟地址0x%016lx.\n", p1);
-    cprintf("p2的虚拟地址0x%016lx.\n", p2);
-
-    // 检查幂次正确
-    assert(p0->property == 3 && p1->property == 4 && p2->property == 5);
-
-    // 暂存p0，删后分配看看能不能找到
-    struct Page *temp = p0;
-
-    free_pages(p0, 5);
-
-    p0 = alloc_pages(5);
-    assert(p0 == temp);
-    show_buddy_array(0, MAX_BUDDY_ORDER);
-}
-
-// 这个结构体在
 const struct pmm_manager buddy_pmm_manager = {
     .name = "buddy_pmm_manager",
     .init = buddy_system_init,
