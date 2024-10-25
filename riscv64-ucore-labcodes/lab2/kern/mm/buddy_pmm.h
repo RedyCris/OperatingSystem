@@ -1,2 +1,8 @@
-#define mem_start ((struct Page *)0x0) // 根据实际内存起始地址进行调整
+#ifndef __KERN_MM_BUDDY_PMM_H__
+#define __KERN_MM_BUDDY_PMM_H__
+
+#include <pmm.h>
+
 extern const struct pmm_manager buddy_pmm_manager;
+
+#endif /* ! __KERN_MM_BUDDY_PMM_H__ */
