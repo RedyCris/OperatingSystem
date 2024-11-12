@@ -24,8 +24,8 @@
  *              a general list struct to a special struct (such as struct page). You can find some MACRO:
  *              le2page (in memlayout.h), (in future labs: le2vma (in vmm.h), le2proc (in proc.h),etc.
  */
-
-list_entry_t pra_list_head, *curr_ptr;
+extern list_entry_t pra_list_head;
+list_entry_t  *curr_ptr;
 /*
  * (2) _fifo_init_mm: init pra_list_head and let  mm->sm_priv point to the addr of pra_list_head.
  *              Now, From the memory control struct mm_struct, we can access FIFO PRA
@@ -33,11 +33,14 @@ list_entry_t pra_list_head, *curr_ptr;
 static int
 _clock_init_mm(struct mm_struct *mm)
 {     
-     /*LAB3 EXERCISE 4: YOUR CODE*/ 
+     /*LAB3 EXERCISE 4: 2210917*/ 
      // 初始化pra_list_head为空链表
      // 初始化当前指针curr_ptr指向pra_list_head，表示当前页面替换位置为链表头
      // 将mm的私有成员指针指向pra_list_head，用于后续的页面替换算法操作
      //cprintf(" mm->sm_priv %x in fifo_init_mm\n",mm->sm_priv);
+     list_init(&pra_list_head);//初始化
+     curr_ptr=&pra_list_head;//curr_ptr指向当前页面替换的位置（初始值为链表头部）
+     mm->sm_priv=&pra_list_head;
      return 0;
 }
 /*
@@ -50,11 +53,15 @@ _clock_map_swappable(struct mm_struct *mm, uintptr_t addr, struct Page *page, in
  
     assert(entry != NULL && curr_ptr != NULL);
     //record the page access situlation
-    /*LAB3 EXERCISE 4: YOUR CODE*/ 
+    /*LAB3 EXERCISE 4: 2210917*/ 
     // link the most recent arrival page at the back of the pra_list_head qeueue.
     // 将页面page插入到页面链表pra_list_head的末尾
     // 将页面的visited标志置为1，表示该页面已被访问
+    list_entry_t *head=mm->sm_priv;
+    list_add(list_prev(curr_ptr),entry);//将新页面插入到链表中 curr_ptr 前一个位置（相当于插入到链表末尾）
+    page->visited=1;
     return 0;
+    //这个函数用于将一个新加载的页面插入到 Clock 算法的链表中
 }
 /*
  *  (4)_fifo_swap_out_victim: According FIFO PRA, we should unlink the  earliest arrival page in front of pra_list_head qeueue,
@@ -70,12 +77,34 @@ _clock_swap_out_victim(struct mm_struct *mm, struct Page ** ptr_page, int in_tic
      //(1)  unlink the  earliest arrival page in front of pra_list_head qeueue
      //(2)  set the addr of addr of this page to ptr_page
     while (1) {
-        /*LAB3 EXERCISE 4: YOUR CODE*/ 
+        /*LAB3 EXERCISE 4: 2210917*/ 
         // 编写代码
         // 遍历页面链表pra_list_head，查找最早未被访问的页面
         // 获取当前页面对应的Page结构指针
         // 如果当前页面未被访问，则将该页面从页面链表中删除，并将该页面指针赋值给ptr_page作为换出页面
         // 如果当前页面已被访问，则将visited标志置为0，表示该页面已被重新访问
+        if (curr_ptr == head) {
+            curr_ptr = list_next(curr_ptr);
+        }
+
+        // 获取当前页面
+        struct Page *page = le2page(curr_ptr, pra_page_link);
+
+        // 检查当前页面的访问位
+        if (page->visited == 0) {
+            // 访问位为 0，则选择此页面作为 victim
+            *ptr_page = page;
+
+            // 将 curr_ptr 指向下一个页面，为下一次替换做准备
+            curr_ptr = list_next(curr_ptr);
+            return 0;  // 找到 victim 页面，返回
+        } else {
+            // 访问位为 1，则将其重置为 0，继续检查下一个页面
+            page->visited = 0;
+
+            // 指向下一个页面
+            curr_ptr = list_next(curr_ptr);
+        }
     }
     return 0;
 }
