@@ -84,27 +84,26 @@ _clock_swap_out_victim(struct mm_struct *mm, struct Page ** ptr_page, int in_tic
         // 如果当前页面未被访问，则将该页面从页面链表中删除，并将该页面指针赋值给ptr_page作为换出页面
         // 如果当前页面已被访问，则将visited标志置为0，表示该页面已被重新访问
         if (curr_ptr == head) {
-            curr_ptr = list_next(curr_ptr);
+            curr_ptr = curr_ptr->next;
         }
 
         // 获取当前页面
         struct Page *page = le2page(curr_ptr, pra_page_link);
 
         // 检查当前页面的访问位
-        if (page->visited == 0) {
-            // 访问位为 0，则选择此页面作为 victim
-            *ptr_page = page;
-
-            // 将 curr_ptr 指向下一个页面，为下一次替换做准备
-            curr_ptr = list_next(curr_ptr);
-            return 0;  // 找到 victim 页面，返回
-        } else {
-            // 访问位为 1，则将其重置为 0，继续检查下一个页面
-            page->visited = 0;
-
-            // 指向下一个页面
-            curr_ptr = list_next(curr_ptr);
+    if(page->visited==0)
+        {
+            list_entry_t * t=curr_ptr;
+            curr_ptr=curr_ptr->next;
+            *ptr_page=page;
+            
+            cprintf("curr_ptr 0xffffffff%08x\n",(uintptr_t)t);
+            list_del(t);
+            break;
         }
+        page->visited=0;
+        curr_ptr=curr_ptr->next;
+    
     }
     return 0;
 }
