@@ -401,7 +401,7 @@ do_pgfault(struct mm_struct *mm, uint_t error_code, uintptr_t addr) {
             //(1）According to the mm AND addr, try
             //to load the content of right disk page
             //into the memory which page managed.
-             swap_in(mm, addr, &page); 
+            swap_in(mm, addr, &page); 
 
             //(2) According to the mm,
             //addr AND page, setup the

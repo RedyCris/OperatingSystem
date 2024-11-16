@@ -134,7 +134,9 @@ _fifo_set_unswappable(struct mm_struct *mm, uintptr_t addr)
 
 static int
 _fifo_tick_event(struct mm_struct *mm)
-{ return 0; }
+{ 
+    return 0; 
+}
 
 
 struct swap_manager swap_manager_fifo =
