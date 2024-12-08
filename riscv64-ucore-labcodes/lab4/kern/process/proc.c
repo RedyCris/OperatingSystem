@@ -297,7 +297,7 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
         goto fork_out;
     }
     ret = -E_NO_MEM;
-    //LAB4:EXERCISE2 YOUR CODE
+    //LAB4:EXERCISE2 2213897
     /*
      * Some Useful MACROs, Functions and DEFINEs, you can use them in below implementation.
      * MACROs or Functions:
@@ -323,6 +323,37 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
     //    6. call wakeup_proc to make the new child process RUNNABLE
     //    7. set ret vaule using child proc's pid
 
+    proc = alloc_proc();    // 调用alloc_proc函数分配一个proc_struct结构体
+    
+    if (proc == NULL) { // 如果分配失败，返回错误码
+        goto fork_out;
+    }
+
+    proc->parent = current; // 设置父进程为当前进程
+
+    if (setup_kstack(proc) != 0) {  // 调用setup_kstack函数为子进程分配内核栈
+        goto bad_fork_cleanup_kstack;
+    }
+
+    if (copy_mm(clone_flags, proc) != 0) {  // 调用copy_mm函数复制父进程的内存管理信息
+        goto bad_fork_cleanup_proc;
+    }
+
+    copy_thread(proc, stack, tf);   // 调用copy_thread函数复制父进程的trapframe信息
+
+    bool intr_flag;
+    local_intr_save(intr_flag); // 关闭中断
+    
+    proc->pid = get_pid();  // 为子进程分配pid
+    hash_proc(proc);    // 将子进程添加到hash_list中
+    list_add(&proc_list, &(proc->list_link));   // 将子进程添加到proc_list中
+    nr_process++;
+
+    local_intr_restore(intr_flag);  // 开启中断
+
+    wakeup_proc(proc);  // 唤醒子进程
+
+    ret = proc->pid;    // 设置返回值为子进程的pid
     
 
 fork_out:
