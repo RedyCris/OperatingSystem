@@ -103,6 +103,11 @@ alloc_proc(void) {
      *       uint32_t flags;                             // Process flag
      *       char name[PROC_NAME_LEN + 1];               // Process name
      */
+        memset(proc, 0, sizeof(struct proc_struct));//初始化proc_struct结构体
+
+        proc->state = PROC_UNINIT;
+        proc->pid = -1;
+        proc->cr3 = boot_cr3;//进程的页目录表
 
      //LAB5 YOUR CODE : (update LAB4 steps)
      /*
@@ -206,7 +211,17 @@ proc_run(struct proc_struct *proc) {
         *   lcr3():                   Modify the value of CR3 register
         *   switch_to():              Context switching between two processes
         */
-
+        //函数作用为切换进程
+        bool intr_flag;
+        struct proc_struct *prev = current, *next = proc;
+        local_intr_save(intr_flag);// local_intr_save(x)关闭中断
+        {
+            current = proc; //当前进程设为待调度的进程
+            lcr3(next->cr3);//cr3寄存器改为需要运行进程的页目录表
+            switch_to(&(prev->context), &(next->context));//switch_to进行上下文切换
+        }
+        
+        local_intr_restore(intr_flag);//local_intr_restore(x)恢复中断
     }
 }
 
@@ -394,7 +409,38 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
     //    5. insert proc_struct into hash_list && proc_list
     //    6. call wakeup_proc to make the new child process RUNNABLE
     //    7. set ret vaule using child proc's pid
+    proc = alloc_proc();    // 调用alloc_proc函数分配一个proc_struct结构体
+    
+    if (proc == NULL) { // 如果分配失败，返回错误码
+        goto fork_out;
+    }
 
+    proc->parent = current; // 设置父进程为当前进程
+
+    if (setup_kstack(proc) != 0) {  // 调用setup_kstack函数为子进程分配内核栈
+        goto bad_fork_cleanup_kstack;
+    }
+
+    if (copy_mm(clone_flags, proc) != 0) {  // 调用copy_mm函数复制父进程的内存管理信息
+        goto bad_fork_cleanup_proc;
+    }
+
+    copy_thread(proc, stack, tf);   // 调用copy_thread函数复制父进程的trapframe信息
+
+    bool intr_flag;
+    local_intr_save(intr_flag); // 关闭中断
+    
+    proc->pid = get_pid();  // 为子进程分配pid
+    hash_proc(proc);    // 将子进程添加到hash_list中
+    list_add(&proc_list, &(proc->list_link));   // 将子进程添加到proc_list中
+    nr_process++;
+
+    local_intr_restore(intr_flag);  // 开启中断
+
+    wakeup_proc(proc);  // 唤醒子进程
+
+    ret = proc->pid;    // 设置返回值为子进程的pid
+    
     //LAB5 YOUR CODE : (update LAB4 steps)
     //TIPS: you should modify your written code in lab4(step1 and step5), not add more code.
    /* Some Functions
@@ -595,7 +641,7 @@ load_icode(unsigned char *binary, size_t size) {
     // Keep sstatus
     uintptr_t sstatus = tf->status;
     memset(tf, 0, sizeof(struct trapframe));
-    /* LAB5:EXERCISE1 YOUR CODE
+    /* LAB5:EXERCISE1 2213897
      * should set tf->gpr.sp, tf->epc, tf->status
      * NOTICE: If we set trapframe correctly, then the user level process can return to USER MODE from kernel. So
      *          tf->gpr.sp should be user stack top (the value of sp)
@@ -603,6 +649,12 @@ load_icode(unsigned char *binary, size_t size) {
      *          tf->status should be appropriate for user program (the value of sstatus)
      *          hint: check meaning of SPP, SPIE in SSTATUS, use them by SSTATUS_SPP, SSTATUS_SPIE(defined in risv.h)
      */
+    tf->gpr.sp = USTACKTOP;
+    tf->epc = elf->e_entry;
+    // Set SPP to 0 so that we return to user mode
+    // Set SPIE to 1 so that we can handle interrupts
+    tf->status = (sstatus & ~SSTATUS_SPP) | SSTATUS_SPIE;
+
 
 
     ret = 0;
