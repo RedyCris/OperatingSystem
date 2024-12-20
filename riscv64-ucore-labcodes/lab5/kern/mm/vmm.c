@@ -201,7 +201,8 @@ dup_mmap(struct mm_struct *to, struct mm_struct *from) {
 
         insert_vma_struct(to, nvma);
 
-        bool share = 0;
+        // cow: 启用共享
+        bool share = 1;
         if (copy_range(to->pgdir, from->pgdir, vma->vm_start, vma->vm_end, share) != 0) {
             return -E_NO_MEM;
         }
@@ -434,7 +435,26 @@ do_pgfault(struct mm_struct *mm, uint_t error_code, uintptr_t addr) {
             cprintf("pgdir_alloc_page in do_pgfault failed\n");
             goto failed;
         }
-    } else {
+    } 
+
+    // 添加cow处理代码
+    else if ((*ptep & PTE_V) && (error_code & 3 == 3)) {
+        // cow: 修改时拷贝
+        // 当程序尝试修改只读的内存页面的时候，将触发PageFault 中断 错误代码中P=1,W/R=1
+        // 因此，当错误代码最低两位都为1的时候，说明进程访问了共享的页面，内核需要重新分配页面、
+        // 拷贝页面内容、建立映射关系。
+
+        struct Page *page = pte2page(*ptep);
+        struct Page *npage = pgdir_alloc_page(mm->pgdir, addr, perm);
+        uintptr_t src_kvaddr = page2kva(page);
+        uintptr_t dst_kvaddr = page2kva(npage);
+        memcpy(dst_kvaddr, src_kvaddr, PGSIZE);
+
+    }
+    
+    
+    
+    else {
         /*LAB3 EXERCISE 3: YOUR CODE
         * 请你根据以下信息提示，补充函数
         * 现在我们认为pte是一个交换条目，那我们应该从磁盘加载数据并放到带有phy addr的页面，
