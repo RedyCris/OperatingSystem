@@ -448,8 +448,10 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
     proc->pid = get_pid();  // 为子进程分配pid
     hash_proc(proc);    // 将子进程添加到hash_list中
     //list_add(&proc_list, &(proc->list_link));   // 将子进程添加到proc_list中
-    set_links(proc); // 设置进程间的链接关系,将子进程添加到proc_list中
     //nr_process++;
+    
+    //lab5 modify
+    set_links(proc); // 设置进程间的链接关系,将子进程添加到proc_list中
 
     local_intr_restore(intr_flag);  // 开启中断
 

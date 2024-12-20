@@ -108,6 +108,6 @@ All done in process 2.
 yield pass.
 all user-mode processes have quit.
 init check memory pass.
-kernel panic at kern/process/proc.c:490:
+kernel panic at kern/process/proc.c:492:
     initproc exit.
 
