@@ -23,7 +23,7 @@ PMP1: 0x0000000000000000-0xffffffffffffffff (A,R,W,X)
 
 Special kernel symbols:
   entry  0xc0200032 (virtual)
-  etext  0xc020658a (virtual)
+  etext  0xc02065b6 (virtual)
   edata  0xc02a7630 (virtual)
   end    0xc02b2b8c (virtual)
 Kernel executable memory footprint: 715KB
@@ -96,6 +96,50 @@ swap_out: i 0, store page in vaddr 0x2000 to disk swap entry 3
 swap_in: load disk swap entry 2 with swap_page in vadr 0x1000
 check_swap() succeeded!
 ++ setup timer interrupts
-all user-mode processes have quit.
-kernel panic at kern/process/proc.c:867:
-    assertion failed: nr_process == 2
+kernel_execve: pid = 2, name = "testbss".
+Breakpoint
+Making sure bss works right...
+Yes, good.  Now doing a wild write off the end...
+testbss may pass.
+Store/AMO page fault
+not valid addr c02000, and  can not find it in vma
+trapframe at 0xffffffffc04b8ee0
+  zero     0x00000000
+  ra       0x008005ea
+  sp       0x7fffffe0
+  gp       0x00000000
+  tp       0x00000000
+  t0       0x00000000
+  t1       0x7fffffa8
+  t2       0x00000000
+  s0       0x00000000
+  s1       0x00000000
+  a0       0x00000000
+  a1       0x0000000a
+  a2       0x00800a00
+  a3       0x7fffffa8
+  a4       0x00100000
+  a5       0x00c025ec
+  a6       0x00000000
+  a7       0x00000000
+  s2       0x00000000
+  s3       0x00000000
+  s4       0x00000000
+  s5       0x00000000
+  s6       0x00000000
+  s7       0x00000000
+  s8       0x00000000
+  s9       0x00000000
+  s10      0x00000000
+  s11      0x00000000
+  t3       0x00800a00
+  t4       0x00000000
+  t5       0x00000000
+  t6       0x00000000
+  status   0x00046020
+  epc      0x008005f0
+  tval 0x00c02000
+  cause    0x0000000f
+kernel panic at kern/trap/trap.c:248:
+    handle pgfault failed. invalid parameter
+

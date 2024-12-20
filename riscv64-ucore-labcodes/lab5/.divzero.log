@@ -23,7 +23,7 @@ PMP1: 0x0000000000000000-0xffffffffffffffff (A,R,W,X)
 
 Special kernel symbols:
   entry  0xc0200032 (virtual)
-  etext  0xc020658a (virtual)
+  etext  0xc02065b6 (virtual)
   edata  0xc02a7630 (virtual)
   end    0xc02b2b8c (virtual)
 Kernel executable memory footprint: 715KB
@@ -96,6 +96,14 @@ swap_out: i 0, store page in vaddr 0x2000 to disk swap entry 3
 swap_in: load disk swap entry 2 with swap_page in vadr 0x1000
 check_swap() succeeded!
 ++ setup timer interrupts
+kernel_execve: pid = 2, name = "divzero".
+Breakpoint
+value is -1.
+user panic at user/divzero.c:9:
+    FAIL: T.T
+
 all user-mode processes have quit.
-kernel panic at kern/process/proc.c:867:
-    assertion failed: nr_process == 2
+init check memory pass.
+kernel panic at kern/process/proc.c:490:
+    initproc exit.
+
