@@ -1,8 +1,4 @@
 # OperatingSystem
 
-这是南开大学操作系统课程大作业小组提交的 ucore 操作系统代码仓库。
-
-## ucore 操作系统实验框架
-
-### 项目简介
-本项目基于 ucore 实验构建，ucore 是一个基于 RISC-V 指令集架构（ISA）的轻量级操作系统框架。由于该实验框架的核心模块（包括页表管理、进程调度、中断和异常处理、系统调用实现以及物理内存分配）尚未实现，研究团队完成了这些关键模块的编码和功能验证，最终开发出了一个功能完备的轻量级操作系统，能够在 RISC-V 架构上稳定运行。
+### Project Introduction
+This project is built on ucore — a lightweight operating system framework based on the RISC-V instruction set architecture (ISA). Since core modules of the framework (including page table management, process scheduling, interrupt and exception handling, system call implementation, and physical memory allocation) were unimplemented, the research team completed the coding and functional verification of these key modules, and finally developed a fully functional lightweight operating system that can run stably on the RISC-V architecture.
